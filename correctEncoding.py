@@ -1,16 +1,15 @@
-contentFile = open('dblp/dblp.xml')
-keyFile = open('dblp/htmllatin1.txt')
-out = open('dblp/utf8.xml', 'w')
+with open('dblp/dblp.xml') as content_file:
+	content = content_file.read()
 
-content = contentFile.read()
 count = 0
+with open('dblp/htmllatin1.txt') as key_file:
+	for line in key_file:
+		count = count + 1
+		trans_from = line.split()[0]
+		trans_to = line.split()[1]
+		print(count, trans_from, trans_to)
+		content = content.replace(trans_from, trans_to)
 
-for line in keyFile:
-	count = count + 1
-	transFrom = line.split()[0]
-	transTo = line.split()[1]
-	print(count, transFrom, transTo)
-	content = content.replace(transFrom, transTo)
 
-
-out.write(content)
+with open('dblp/utf8.xml', 'w') as out_file:
+	out_file.write(content)

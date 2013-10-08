@@ -1,0 +1,15 @@
+{
+	"host" : "127.0.0.1",
+	"port" : 9160,
+	"keyspace" : "dblp",
+
+	"types" : ["article", "inproceedings", "proceedings", "book", 
+		"incollection", "phdthesis", "mastersthesis", "www"],
+
+	"fields" : ["key", "address", "authors", "booktitle", "cdrom", "chapter",
+		"cite", "crossref", "editor", "ee", "isbn", "journal", "month",
+		"note", "number", "pages", "papertype", "publisher", "school",
+		"series", "title", "url", "volume", "year"],
+
+	"lookup_fields" : ["author", "title", "year"]
+}
