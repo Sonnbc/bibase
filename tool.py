@@ -1,5 +1,6 @@
 from controller import Controller
 import sys
+import json
 
 _controller = Controller()
 
@@ -11,12 +12,11 @@ def get(key):
 def search(query):
 	tokens = [x for x in query.split() if len(x) > 2]
 	
-	numbers = [int(x) for x in tokens if x.isdigit()]
-	year_result = _controller.lookup('year', numbers) if numbers else []
+	numbers = set([int(x) for x in tokens if x.isdigit()])
 
 	author_result = _controller.lookup('author', tokens)
 
-	total = author_result + year_result
+	total = [x for x in author_result if x['year'] in numbers] if numbers else author_result
 
 	result = {}
 	for item in total:
@@ -26,7 +26,9 @@ def search(query):
 
 if __name__ == "__main__":
 	if (sys.argv[1] == 'add'):
-		add(sys.argv[2])
+		print(sys.argv[2])
+		with open(sys.argv[2]) as data:
+			add(json.load(data))
 	else:	
 		res = search(sys.argv[1])
 		for idx, item in enumerate(res):

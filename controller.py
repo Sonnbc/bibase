@@ -23,7 +23,7 @@ class Controller:
 		self._connection.close()
 
 	def compute_key(self, item):
-		tokens = [author.split()[-1][0] for author in item['authors'].split('and')]
+		tokens = [author.split()[-1][0] for author in item['authors'].split(' and ')]
 		tokens.append(str(item['year']))
 		key = ''.join(tokens).lower()
 		return key
@@ -48,10 +48,9 @@ class Controller:
 	def unsafe_insert(self, item):
 		trans = string.maketrans('[]', '()')
 		fields = str(item.keys()).translate(trans, '\'')
-		values = str(item.values()).translate(trans)
+		values = str(item.values()).translate(trans).replace(', u\'', ', \'') #TODO:make less hacky
 		
 		query = ''.join(['INSERT INTO main ', fields, ' VALUES ', values])
-		
 		cursor = self._connection.cursor()
 		cursor.execute(query)
 		cursor.close()
@@ -69,14 +68,21 @@ class Controller:
 
 	def lookup(self, field, values)	:
 		l = str(values).replace('[','(').replace(']', ')')
-		query = ''.join(['SELECT key FROM ', field, 'lookup WHERE ', 
+		query = ''.join(['SELECT * FROM ', field, 'lookup WHERE ', 
 			field, ' in ', l ])
 
 		cursor = self._connection.cursor()
 		cursor.execute(query)
 		
-		keys = [row[0] for row in cursor]
-		return self.get_many(keys) if keys else []
+		keys = [row[1] for row in cursor]
+		dic = {}
+		for key in keys:
+			dic[key] = dic.get(key, 0) + 1
+
+		max_count = dic[max(dic, key=dic.get)]
+		best_keys = [key for key in dic if dic[key] == max_count]
+
+		return self.get_many(best_keys) if best_keys else []
 
 	def is_conflict(self, new, old):
 		return any(field in new and new[field] != old[field] 
@@ -85,12 +91,16 @@ class Controller:
 	def insert(self, item):
 		item['key'] = self.compute_key(item)
 
+		#TODO: fix encoding
 		old_item = self.get(item["key"])
 		if old_item:
 			if old_item['title'].lower() != item['title'].lower():
 				raise NotImplementedError(
 					'Different papers with the same key is unsupported.')
+				return
 			if self.is_conflict(item, old_item):
+				#print old_item['journal']
+				#print item['journal']
 				raise ValueError('Conflicted detected. Cannot merge.')
 				return
 			print("Item exists. Merging...")
@@ -98,7 +108,7 @@ class Controller:
 		self.unsafe_insert(item)
 
 		#TODO: search for title
-		authors = [author.split()[-1] for author in item['authors'].split('and')]
+		authors = [author.split()[-1] for author in item['authors'].split(' and ')]
 		self.unsafe_insert_lookup('author', authors, item['key'])
 
 		self.unsafe_insert_lookup('year', [item['year']], item['key'])
