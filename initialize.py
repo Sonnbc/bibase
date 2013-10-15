@@ -1,10 +1,11 @@
-import json
-import cql
-import controller
+import json, cql
 
-#TODO: change authors to author ??
+import controller
+from setting import settings, lookup_table_name
+
+
 _main = """CREATE TABLE main (key varchar PRIMARY KEY, 
-	authors varchar, editor varchar, title varchar, 
+	author varchar, editor varchar, title varchar, 
 	booktitle varchar, pages varchar, year int, 
 	address varchar, journal varchar, volume varchar, 
 	number varchar, month varchar, url varchar, 
@@ -13,22 +14,24 @@ _main = """CREATE TABLE main (key varchar PRIMARY KEY,
 	isbn varchar, series varchar, school varchar, 
 	chapter varchar, papertype varchar)"""
 
-_author = """CREATE TABLE authorLookup (author varchar, 
-	key varchar, PRIMARY KEY (author, key) )"""
+_lookup = """CREATE TABLE :name (:field varchar, 
+	key varchar, PRIMARY KEY (:field, key) )"""
 
-_title = """CREATE TABLE titleLookup (title varchar, 
-	key varchar, PRIMARY KEY (title, key) )"""
-
-_year = """CREATE TABLE yearLookup (year int,
-	key varchar, PRIMARY KEY (year, key) )"""
 
 def initialize():
-	queries = [_main, _author, _title, _year]
-	args = [[]]*len(queries)
-
 	connection = controller.make_connection()
-
 	cursor = connection.cursor()
+
+	#create the main table
+	cursor.execute(_main)
+
+	queries = [ _lookup.replace(':field', field).
+		replace(':name', lookup_table_name(field))
+		for field in settings['lookup_fields'] ]
+
+	args = [[]] * len(settings['lookup_fields'])
+
+	#create lookup tables
 	cursor.executemany(queries, args)
 	
 	cursor.close()
