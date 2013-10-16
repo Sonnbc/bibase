@@ -45,10 +45,19 @@ class Controller:
 		res = [dict(zip(_settings['fields'], row)) for row in rows]
 		return [dict(zip(_settings['fields'], row)) for row in rows]
 
+	def test(self, item):
+		query = 'INSERT INTO main (key, authors, year, title) VALUES (:key, :authors, :year, :title)'
+		cursor = self._connection.cursor()
+		print cursor.prepare_inline(query, item)
+		cursor.execute(query, item)
+		cursor.close()
+
 	def unsafe_insert(self, item):
-		trans = string.maketrans('[]', '()')
-		fields = str(item.keys()).translate(trans, '\'')
-		values = str(item.values()).translate(trans).replace(', u\'', ', \'') #TODO:make less hacky
+		#trans = string.maketrans('[]', '()')
+		#fields = str(item.keys()).translate(trans, '\'')
+		#values = str(item.values()).translate(trans).replace(', u\'', ', \'') #TODO:make less hacky
+		fields = util.list_to_fields(item.keys())
+		values = util.list_to_values(item.values())
 		
 		query = ''.join(['INSERT INTO main ', fields, ' VALUES ', values])
 		cursor = self._connection.cursor()
