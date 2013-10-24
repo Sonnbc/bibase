@@ -1,166 +1,152 @@
-import json
-import cql
-import string
+import cql, string
 import util
-
-#assume different keys for different paper
-#this means Adam and Bob only write one paper in year 2007 whose key is AB2007
-
-#initialize
-with open('settings.json') as settingFile:
-	_settings = util.convert(json.load(settingFile))
+from setting import settings
+import re
 
 def make_connection():	
 	return cql.connect(
-		host = _settings['host'], port = _settings['port'], 
-		keyspace = _settings['keyspace'], cql_version = '3.0.0')
+		host = settings['host'], port = settings['port'], 
+		keyspace = settings['keyspace'], cql_version = '3.0.0')
 
 class Controller:
+	
 	def __init__(self):
 		self._connection = make_connection()
 
 	def close(self)	:
 		self._connection.close()
+	
+	def lookup_tokens(self, entry):
+		tokens = []
+		for field in settings['lookup_fields']:
+			if entry.get(field, None):
+				tokens = tokens + util.nice_tokens( entry[field] ) 
+		return set(tokens)
 
-	def compute_key(self, item):
-		tokens = [author.split()[-1][0] for author in item['authors'].split(' and ')]
-		tokens.append(str(item['year']))
-		key = ''.join(tokens).lower()
-		return key
+	def row_to_entry(self, row):
+		return dict(zip(settings['fields'], row)) if row else None
 
 	def get(self, key):
 		cursor = self._connection.cursor()
 		cursor.execute('SELECT * FROM main WHERE key=:key', dict(key=key))
 		row = cursor.fetchone()
 		cursor.close()
-		return dict(zip(_settings['fields'], row)) if row else None
+		return self.row_to_entry(row)
 
-	def get_many(self, keys):
-		keys = [x.encode('utf8') for x in keys]
-		l = '(\'' + '\',\''.join(keys) + '\')'
+	def getmany(self, keys):
 		cursor = self._connection.cursor()
-		cursor.execute('SELECT * FROM main WHERE key in ' + l)
-		rows = cursor.fetchall() #TODO: don't do this
+		query = ''.join(['SELECT * FROM main WHERE key IN ', 
+			util.values_holder(keys)])
+		arg = {key:key for key in keys}
+		cursor.execute(query, arg)
+		rows = cursor.fetchall() #TODO: dangerous? 
 		cursor.close()
-		res = [dict(zip(_settings['fields'], row)) for row in rows]
-		return [dict(zip(_settings['fields'], row)) for row in rows]
+		return [self.row_to_entry(row) for row in rows] if rows else None
 
-	def test(self, item):
-		query = 'INSERT INTO main (key, authors, year, title) VALUES (:key, :authors, :year, :title)'
-		cursor = self._connection.cursor()
-		print cursor.prepare_inline(query, item)
-		cursor.execute(query, item)
-		cursor.close()
-
-	def unsafe_insert(self, item):
-		#trans = string.maketrans('[]', '()')
-		#fields = str(item.keys()).translate(trans, '\'')
-		#values = str(item.values()).translate(trans).replace(', u\'', ', \'') #TODO:make less hacky
-		fields = util.list_to_fields(item.keys())
-		values = util.list_to_values(item.values())
+	def delete(self, key):
+		entry = self.get(key)
+		if not entry:
+			return 
 		
-		query = ''.join(['INSERT INTO main ', fields, ' VALUES ', values])
-		cursor = self._connection.cursor()
-		cursor.execute(query)
+		#remove from main
+		cursor = self._connection.cursor()			
+		cursor.execute('DELETE FROM main WHERE key=:key', dict(key=key))
+
+		#remove from lookup
+		tokens = self.lookup_tokens(entry)
+		query = ''.join(['DELETE FROM lookup WHERE thing in ',
+			util.values_holder(tokens), ' AND key=:key'])
+		arg = {token:token for token in tokens}
+		arg['key'] = key
+
+		cursor.execute(query, arg)
+
 		cursor.close()
 
+	def unsafe_insert_main(self, entry):
+		fields = [key for key in entry.keys() if key in settings['fields']]
+		values = [entry[field] for field in fields]
 
-	def unsafe_insert_lookup(self, field, values, key):
+		query = ''.join( ['INSERT INTO main ', util.fields_string(fields), 
+			' VALUES ', util.values_holder(fields)] )
+
 		cursor = self._connection.cursor()
-		query = ''.join(['INSERT INTO ', field, 'lookup (', 
-			field, ', key) VALUES (:value, :key)'])
-
-		args = [[dict(value=value, key=key)] for value in values]
-		
-		cursor.executemany([query]*len(values), args)
+		cursor.execute(query, entry)
 		cursor.close()
 
-	def lookup(self, field, values)	:
-		l = str(values).replace('[','(').replace(']', ')')
-		query = ''.join(['SELECT * FROM ', field, 'lookup WHERE ', 
-			field, ' in ', l ])
+	def unsafe_insert_lookup(self, entry):
+		key = entry['key'] if 'key' in entry else util.compute_key(entry)
+
+		tokens = self.lookup_tokens(entry)
+
+		queries = (['INSERT INTO lookup (thing,key) VALUES (:token,:key)'] * 
+			len(tokens) )
+		args = [ [dict(token=token, key=key)] for token in tokens ]
 
 		cursor = self._connection.cursor()
-		cursor.execute(query)
+		cursor.executemany(queries, args)
+		cursor.close()
+
+	def insert(self, entry):
+		#create a copy to keep the original intact
+		entry = dict(entry)
+		entry['key'] = util.compute_key(entry)
 		
-		keys = [row[1] for row in cursor]
-		dic = {}
-		for key in keys:
-			dic[key] = dic.get(key, 0) + 1
-
-		max_count = dic[max(dic, key=dic.get)]
-		best_keys = [key for key in dic if dic[key] == max_count]
-
-		return self.get_many(best_keys) if best_keys else []
-
-	def is_conflict(self, new, old):
-		return any(field in new and new[field] != old[field] 
-			for field in old if old[field])
-
-	def insert(self, item):
-		item['key'] = self.compute_key(item)
-
-		#TODO: fix encoding
-		old_item = self.get(item["key"])
-		if old_item:
-			if old_item['title'].lower() != item['title'].lower():
+		old_entry = self.get(entry['key'])
+		if old_entry:
+			if util.is_close(old_entry['title'], entry['title']):
 				raise NotImplementedError(
 					'Different papers with the same key is unsupported.')
-				return
-			if self.is_conflict(item, old_item):
-				#print old_item['journal']
-				#print item['journal']
-				raise ValueError('Conflicted detected. Cannot merge.')
-				return
-			print("Item exists. Merging...")
+		
+		self.unsafe_insert_main(entry)
+		self.unsafe_insert_lookup(entry)
 
-		self.unsafe_insert(item)
+	def hack(self, s):
+		return re.match('^[\w]+$', s) is not None
 
-		#TODO: search for title
-		authors = [author.split()[-1] for author in item['authors'].split(' and ')]
-		self.unsafe_insert_lookup('author', authors, item['key'])
+	#TODO: refractor this
+	def search(self, tokens):
+		tokens = [token.lower() for token in tokens]
+		
+		query = 'SELECT key FROM lookup WHERE thing=:token'
+		
+		cursors = [self._connection.cursor() for token in tokens]
+		for i in xrange(len(tokens)):
+			cursors[i].execute(query, dict(token=tokens[i]))
 
-		self.unsafe_insert_lookup('year', [item['year']], item['key'])
-	
+		print [cursor.rowcount for cursor in cursors]
+
+		cursor = min(cursors, key=lambda x: x.rowcount)
+
+		for other in cursors:
+			if other is not cursor:
+				other.close()
+
+		cursor.arraysize = 10000
+		buff = []
+		while True:
+			while not buff:
+				#TODO: fix this
+				keys = set( [x[0] for x in cursor.fetchmany() if self.hack(x[0])] )
+				if not keys:
+					break
+				buff = self.getmany(keys) 
+			#TODO: fix this
+			if not buff:
+				return	
+			yield buff.pop()
+		
+		cursor.close()
+
 if __name__ == '__main__':
-	item = {
-		'authors': 'R. L. Adam and Jawei Han and Son Nguyen',
-		'title': 'Firefox',
-		'year': 2007,
-		'isbn': '1234-567-8912'
-	}
-
-	item2 = {
-		'authors': 'R. L. Adam',
-		'title': 'Chrome',
-		'year': 2000
-	}
-
-	item3 = {
-		'authors': 'author', 'editor': 'editor', 'title': 'title', 
-		'booktitle': 'booktitle', 'pages': 'pages', 'year': 2000, 
-		'address': 'address', 'journal': 'journal', 'volume': 'volume', 
-		'number': 'number', 'month': 'month', 'url': 'url', 
-		'ee': 'ee', 'cdrom': 'cdrom', 'cite': 'cite', 
-		'publisher': 'publisher', 'note': 'note', 'crossref': 'crossref', 
-		'isbn': 'isbn', 'series': 'series', 'school': 'school', 
-		'chapter': 'chapter', 'papertype': 'papertype'
-	}
-
-	item4 = {
-		'authors': 'R. L. Adam and Jawei Han and Son Nguyen',
-		'title': 'Firefox',
-		'year': 2007,
-		'number': '123124'
-	}
-	
 	controller = Controller()
-	#controller.insert(item)
-	#controller.insert(item2)
-	#controller.insert(item3)
-	#controller.insert(item)
-	#controller.insert(item4)
-	#controller.insert(item2)
-	print(controller.lookup('author', ['Adam']))
-	controller.close()
-	
+	# entry = {
+	# 	'authors': 'R. L. Adam and Jawei Han and Son Nguyen',
+	# 	'title': 'Firefox',
+	# 	'year': 2007,
+	# 	'isbn': '1234-567-8912'
+	# }
+	# controller.unsafe_insert_main(entry)
+
+	#controller.delete('nguyenn1234')
+	print controller.search(['asdasdasad'])

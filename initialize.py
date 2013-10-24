@@ -14,8 +14,11 @@ _main = """CREATE TABLE main (key varchar PRIMARY KEY,
 	isbn varchar, series varchar, school varchar, 
 	chapter varchar, papertype varchar)"""
 
-_lookup = """CREATE TABLE :name (:field varchar, 
-	key varchar, PRIMARY KEY (:field, key) )"""
+#_lookup = """CREATE TABLE :name (:field varchar, 
+#	key varchar, PRIMARY KEY (:field, key) )"""
+
+_lookup = """CREATE TABLE lookup (thing varchar, 
+	key varchar, PRIMARY KEY (thing, key) )"""
 
 
 def initialize():
@@ -25,14 +28,16 @@ def initialize():
 	#create the main table
 	cursor.execute(_main)
 
-	queries = [ _lookup.replace(':field', field).
-		replace(':name', lookup_table_name(field))
-		for field in settings['lookup_fields'] ]
+	# queries = [ _lookup.replace(':field', field).
+	# 	replace(':name', lookup_table_name(field))
+	# 	for field in settings['lookup_fields'] ]
 
-	args = [[]] * len(settings['lookup_fields'])
+	# args = [[]] * len(settings['lookup_fields'])
 
-	#create lookup tables
-	cursor.executemany(queries, args)
+	# #create lookup tables
+	# cursor.executemany(queries, args)
+
+	cursor.execute(_lookup)
 	
 	cursor.close()
 	connection.close()
