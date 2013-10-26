@@ -12,13 +12,17 @@ class Controller:
 	
 	def __init__(self):
 		self._connection = make_connection()
+		self.lookup_cache = {}
 
 	def close(self)	:
 		self._connection.close()
 	
+	def make_cursor(self):
+		return self._connection.cursor()
+
 	def lookup_tokens(self, entry):
 		tokens = []
-		for field in settings['lookup_fields']:
+		for field in settings['searchable_fields']:
 			if entry.get(field, None):
 				tokens = tokens + util.nice_tokens( entry[field] ) 
 		return set(tokens)
@@ -26,22 +30,36 @@ class Controller:
 	def row_to_entry(self, row):
 		return dict(zip(settings['fields'], row)) if row else None
 
+	def row_to_lookup_entry(self, row):
+		return dict(zip(settings['lookup_fields'], row)) if row else None
+
 	def get(self, key):
-		cursor = self._connection.cursor()
+		cursor = self.make_cursor()
 		cursor.execute('SELECT * FROM main WHERE key=:key', dict(key=key))
 		row = cursor.fetchone()
 		cursor.close()
 		return self.row_to_entry(row)
 
+	#TODO: define this function more clearly. count() or not?
+	def get_lookup(self, token, value):
+		cursor = self.make_cursor()
+		cursor.execute('SELECT * FROM lookup WHERE thing=:value', 
+			dict(value=value))
+		print cursor.result
+		rows = cursor.fetchall()
+		cursor.close()
+		#return [self.row_to_lookup_entry(r) for r in rows] if rows else []
+		return []
+
 	def getmany(self, keys):
-		cursor = self._connection.cursor()
+		cursor = self.make_cursor()
 		query = ''.join(['SELECT * FROM main WHERE key IN ', 
 			util.values_holder(keys)])
 		arg = {key:key for key in keys}
 		cursor.execute(query, arg)
 		rows = cursor.fetchall() #TODO: dangerous? 
 		cursor.close()
-		return [self.row_to_entry(row) for row in rows] if rows else None
+		return [self.row_to_entry(row) for row in rows] if rows else []
 
 	def delete(self, key):
 		entry = self.get(key)
@@ -49,7 +67,7 @@ class Controller:
 			return 
 		
 		#remove from main
-		cursor = self._connection.cursor()			
+		cursor = self.make_cursor()			
 		cursor.execute('DELETE FROM main WHERE key=:key', dict(key=key))
 
 		#remove from lookup
@@ -64,42 +82,57 @@ class Controller:
 		cursor.close()
 
 	def unsafe_insert_main(self, entry):
-		fields = [key for key in entry.keys() if key in settings['fields']]
-		values = [entry[field] for field in fields]
+		fields = [field for field in entry.keys() if field in settings['fields']]
 
 		query = ''.join( ['INSERT INTO main ', util.fields_string(fields), 
 			' VALUES ', util.values_holder(fields)] )
 
-		cursor = self._connection.cursor()
+		cursor = self.make_cursor()
 		cursor.execute(query, entry)
 		cursor.close()
 
 	def unsafe_insert_lookup(self, entry):
-		key = entry['key'] if 'key' in entry else util.compute_key(entry)
+		#create a copy to keep the original intact
+		entry = self.keyed_entry(entry)
+		entry['thing'] = None
 
-		tokens = self.lookup_tokens(entry)
+		fields = [field for field in entry.keys() 
+			if field in settings['lookup_fields']]
 
-		queries = (['INSERT INTO lookup (thing,key) VALUES (:token,:key)'] * 
-			len(tokens) )
-		args = [ [dict(token=token, key=key)] for token in tokens ]
+		query = ''.join( ['INSERT INTO lookup ', util.fields_string(fields),
+			' VALUES ', util.values_holder(fields)] )
+		
+		cursor = self.make_cursor()
+		for token in self.lookup_tokens(entry):
+			entry['thing'] = token
+			cursor.execute(query, entry)
 
-		cursor = self._connection.cursor()
-		cursor.executemany(queries, args)
 		cursor.close()
 
 	def insert(self, entry):
-		#create a copy to keep the original intact
-		entry = dict(entry)
-		entry['key'] = util.compute_key(entry)
+		entry = self.keyed_entry(entry)
 		
 		old_entry = self.get(entry['key'])
 		if old_entry:
-			if util.is_close(old_entry['title'], entry['title']):
+			if util.is_the_same(old_entry['title'], entry['title']):
 				raise NotImplementedError(
 					'Different papers with the same key is unsupported.')
 		
 		self.unsafe_insert_main(entry)
 		self.unsafe_insert_lookup(entry)
+
+	def lookup(self, clause):
+		if clause not in self.lookup_cache:
+			self.lookup_cache[clause] = self.get_lookup(*clause)
+		
+		return self.lookup_cache[clause]
+
+	def disjuntion_solver(self, clauses):
+		res = []
+		for clause in clauses:
+			res += self.lookup(clause)
+		#there might be duplicate entries	
+		return res	
 
 	def hack(self, s):
 		return re.match('^[\w]+$', s) is not None
@@ -110,7 +143,7 @@ class Controller:
 		
 		query = 'SELECT key FROM lookup WHERE thing=:token'
 		
-		cursors = [self._connection.cursor() for token in tokens]
+		cursors = [self.make_cursor() for token in tokens]
 		for i in xrange(len(tokens)):
 			cursors[i].execute(query, dict(token=tokens[i]))
 
@@ -138,15 +171,22 @@ class Controller:
 		
 		cursor.close()
 
-if __name__ == '__main__':
-	controller = Controller()
-	# entry = {
-	# 	'authors': 'R. L. Adam and Jawei Han and Son Nguyen',
-	# 	'title': 'Firefox',
-	# 	'year': 2007,
-	# 	'isbn': '1234-567-8912'
-	# }
-	# controller.unsafe_insert_main(entry)
+	###		
+	#helper functions:	
+	###
 
-	#controller.delete('nguyenn1234')
-	print controller.search(['asdasdasad'])
+	def keyed_entry(self, entry):
+		res = dict(entry)
+		if 'key' not in res:
+			res['key'] = util.compute_key(res)
+		return res
+
+if __name__ == '__main__':
+	
+	item = {'author': 'Son Nguyen and Jiawei Han', 'year': 2012, 
+		'title': 'stack over flow'}
+	
+	con = Controller()
+	con.insert(item)
+	#a = con.disjuntion_solver([('author', 'danilevsky')])
+	#print a

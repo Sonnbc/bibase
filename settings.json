@@ -6,13 +6,13 @@
 	"types" : ["article", "inproceedings", "proceedings", "book", 
 		"incollection", "phdthesis", "mastersthesis", "www"],
 
-	"fields" : ["key", "address", "author", "booktitle", "cdrom", "chapter",
+	"fields" : ["address", "author", "booktitle", "cdrom", "chapter",
 		"cite", "crossref", "editor", "ee", "isbn", "journal", "month",
 		"note", "number", "pages", "papertype", "publisher", "school",
 		"series", "title", "url", "volume", "year"],
 
-	"lookup_fields" : ["author", "booktitle", 
+	"searchable_fields" : ["author", "booktitle", 
 		"isbn", "journal", "month", "papertype", "publisher", "school",
-		"series", "title", "volume", "year"]
+		"series", "title", "volume"]
 }
 

@@ -51,8 +51,10 @@ def nice_tokens(s):
 	return tokens		
 
 #TODO: improve this
-def is_close(s1, s2):
+def is_the_same(s1, s2):
 	return s1.lower() == s2.lower()
+
+
 
 
 
