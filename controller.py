@@ -1,7 +1,8 @@
 import cql, string
-import util
+import util, expression
 from setting import settings
 import re
+from threading import Thread
 
 def make_connection():	
 	return cql.connect(
@@ -12,7 +13,6 @@ class Controller:
 	
 	def __init__(self):
 		self._connection = make_connection()
-		self.lookup_cache = {}
 
 	def close(self)	:
 		self._connection.close()
@@ -40,22 +40,11 @@ class Controller:
 		cursor.close()
 		return self.row_to_entry(row)
 
-	#TODO: define this function more clearly. count() or not?
-	def get_lookup(self, token, value):
-		cursor = self.make_cursor()
-		cursor.execute('SELECT * FROM lookup WHERE thing=:value', 
-			dict(value=value))
-		print cursor.result
-		rows = cursor.fetchall()
-		cursor.close()
-		#return [self.row_to_lookup_entry(r) for r in rows] if rows else []
-		return []
-
 	def getmany(self, keys):
 		cursor = self.make_cursor()
-		query = ''.join(['SELECT * FROM main WHERE key IN ', 
-			util.values_holder(keys)])
-		arg = {key:key for key in keys}
+		holder, arg = util.values_holder(keys)
+
+		query = ''.join(['SELECT * FROM main WHERE key IN ', holder])
 		cursor.execute(query, arg)
 		rows = cursor.fetchall() #TODO: dangerous? 
 		cursor.close()
@@ -72,23 +61,25 @@ class Controller:
 
 		#remove from lookup
 		tokens = self.lookup_tokens(entry)
+		holder, arg = util.values_holder(tokens)
+
 		query = ''.join(['DELETE FROM lookup WHERE thing in ',
-			util.values_holder(tokens), ' AND key=:key'])
-		arg = {token:token for token in tokens}
+			holder, ' AND key=:key'])
 		arg['key'] = key
 
 		cursor.execute(query, arg)
-
 		cursor.close()
 
 	def unsafe_insert_main(self, entry):
-		fields = [field for field in entry.keys() if field in settings['fields']]
+		fields = [field for field in entry.keys() 
+			if field in settings['fields']]
 
+		holder, arg = util.values_holder([entry[field] for field in fields])
 		query = ''.join( ['INSERT INTO main ', util.fields_string(fields), 
-			' VALUES ', util.values_holder(fields)] )
+			' VALUES ', holder] )
 
 		cursor = self.make_cursor()
-		cursor.execute(query, entry)
+		cursor.execute(query, arg)
 		cursor.close()
 
 	def unsafe_insert_lookup(self, entry):
@@ -98,14 +89,16 @@ class Controller:
 
 		fields = [field for field in entry.keys() 
 			if field in settings['lookup_fields']]
+		fields.append('thing')
 
+		holder, arg = util.values_holder(entry[field] for field in fields)
 		query = ''.join( ['INSERT INTO lookup ', util.fields_string(fields),
-			' VALUES ', util.values_holder(fields)] )
+			' VALUES ', holder] )
 		
 		cursor = self.make_cursor()
 		for token in self.lookup_tokens(entry):
-			entry['thing'] = token
-			cursor.execute(query, entry)
+			arg['thing'] = token
+			cursor.execute(query, arg)
 
 		cursor.close()
 
@@ -121,55 +114,52 @@ class Controller:
 		self.unsafe_insert_main(entry)
 		self.unsafe_insert_lookup(entry)
 
-	def lookup(self, clause):
-		if clause not in self.lookup_cache:
-			self.lookup_cache[clause] = self.get_lookup(*clause)
-		
-		return self.lookup_cache[clause]
-
-	def disjuntion_solver(self, clauses):
-		res = []
-		for clause in clauses:
-			res += self.lookup(clause)
-		#there might be duplicate entries	
-		return res	
-
-	def hack(self, s):
-		return re.match('^[\w]+$', s) is not None
-
-	#TODO: refractor this
-	def search(self, tokens):
-		tokens = [token.lower() for token in tokens]
-		
-		query = 'SELECT key FROM lookup WHERE thing=:token'
-		
-		cursors = [self.make_cursor() for token in tokens]
-		for i in xrange(len(tokens)):
-			cursors[i].execute(query, dict(token=tokens[i]))
-
-		print [cursor.rowcount for cursor in cursors]
-
-		cursor = min(cursors, key=lambda x: x.rowcount)
-
-		for other in cursors:
-			if other is not cursor:
-				other.close()
-
-		cursor.arraysize = 10000
-		buff = []
-		while True:
-			while not buff:
-				#TODO: fix this
-				keys = set( [x[0] for x in cursor.fetchmany() if self.hack(x[0])] )
-				if not keys:
-					break
-				buff = self.getmany(keys) 
-			#TODO: fix this
-			if not buff:
-				return	
-			yield buff.pop()
-		
+	def count_lookup(self, token, value):
+		cursor = self.make_cursor()
+		cursor.execute('SELECT count(*) FROM lookup WHERE thing=:value limit 20000', 
+			dict(value=value))
+		res = cursor.fetchone()
 		cursor.close()
+		return res[0]
+
+	def getmany_lookup(self, values):
+		cursor = self.make_cursor()
+
+		holder, arg = util.values_holder(values)
+		query = ''.join(['SELECT * FROM lookup WHERE thing in ', holder])
+		print cursor.prepare_inline(query, arg)
+		cursor.execute(query, arg)
+		
+		rows = cursor.fetchall() #TODO: dangerous??
+		print len(rows)
+		cursor.close()
+		return [self.row_to_lookup_entry(row) for row in rows] if rows else []
+
+	def check(self, entry, cnf):
+		import nltk
+		return all(
+				any(clause[1] in nltk.word_tokenize(unicode(entry[clause[0]]).lower())
+					for clause in disjunction)
+				for disjunction in cnf)
+
+	#TODO: (note) if field is not searchable then count is zero
+	#	so if cnf = (author=son or year=1992) then we don't query
+	#   year=1992 at all. This means that unsearchable field can
+	#   only be used at an AND filter, not an OR one.
+	def search(self, search_query):
+		cnf = expression.Expression(search_query).to_cnf()
+		clauses = set([clause for disjunction in cnf for clause in disjunction
+			if clause[0] in settings['searchable_fields'] ])
+
+		sizes = {clause:self.count_lookup(*clause) for clause in clauses}
+		best = min(cnf, key=lambda x:sum(sizes.get(clause,0) for clause in x))
+
+		print sizes
+		print best
+		entries = self.getmany_lookup([clause[1] for clause in best
+			if clause[0] in settings['searchable_fields'] ])
+		print "done"
+		return [entry for entry in entries if self.check(entry, cnf)]
 
 	###		
 	#helper functions:	
@@ -183,10 +173,20 @@ class Controller:
 
 if __name__ == '__main__':
 	
-	item = {'author': 'Son Nguyen and Jiawei Han', 'year': 2012, 
-		'title': 'stack over flow'}
+	# item = {'author': 'Son Nguyen and Jiawei Han', 'year': 2012, 
+	# 	'title': 'stack over flow'}
 	
-	con = Controller()
-	con.insert(item)
+	# con = Controller()
+	# con.insert(item)
 	#a = con.disjuntion_solver([('author', 'danilevsky')])
 	#print a
+
+	con = Controller()
+	s = """
+		(author = han and author = wang) or 
+		((year=2005 or title=system) and (author = gupta))"""
+	
+	res = con.search(s)
+	print len(res)
+	#for entry in res:
+	#	print {field:entry[field] for field in entry if entry[field]}

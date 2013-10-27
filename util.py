@@ -15,7 +15,8 @@ def convert(input):
 	else:
 		return input
 
-#TODO: allow items without author or year. Come up with another method to compute key
+#TODO: allow items without author or year. 
+#TODO: Come up with another method to compute key to eliminate duplicate keys
 def compute_key(item):
 	authors = item['author'].split(' and ')
 
@@ -31,12 +32,12 @@ def fields_string(fields):
 	result = ''.join(['(', ','.join(fields), ')'])
 	return result
 
-#TODO: fix this
-def values_holder(fields):
-	assert( all( isinstance(item, basestring) for item in fields ) )
-	items = [":%s" % convert(item) for item in fields if convert(item) == item]
-	result = ''.join(['(', ','.join(items), ')'])
-	return result
+#TODO: optimize this
+def values_holder(values):
+	items = [':value%d' % i for i in xrange(len(values))]
+	holder = ''.join(['(', ','.join(items), ')'])
+	arg = dict(zip([item[1:] for item in items], values))
+	return holder, arg
 
 _stops = stopwords.words('english')
 def nice_tokens(s):

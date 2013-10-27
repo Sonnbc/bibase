@@ -27,8 +27,8 @@ class Expression:
 		self.tokens = word_tokenize( str_exp.replace('=', ' ') )
 		self.stack = []
 		self.parse(0)
-		print self.parsed
-		print self.to_cnf(self.parsed)
+		#print self.parsed
+		#print self.to_cnf(self.parsed)
 
 	def parse(self, idx):
 		self.reduce()
@@ -68,7 +68,10 @@ class Expression:
 			s = S(ExpressionType.OR, self.stack[-3], self.stack[-1])
 			self.stack = self.stack[:-3] + [s]
 
-	def to_cnf(self, s):
+	def to_cnf(self, s = None):
+		if not s:
+			s = self.parsed
+
 		if s.exptype == ExpressionType.CLAUSE:
 			return [ [(s.s1, s.s2)] ]
 		elif s.exptype == ExpressionType.AND:
