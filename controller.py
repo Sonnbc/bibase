@@ -85,13 +85,16 @@ class Controller:
 	def unsafe_insert_lookup(self, entry):
 		#create a copy to keep the original intact
 		entry = self.keyed_entry(entry)
-		entry['thing'] = None
-
+	
 		fields = [field for field in entry.keys() 
-			if field in settings['lookup_fields']]
-		fields.append('thing')
+			if field in settings['lookup_fields'] if entry[field]]
 
-		holder, arg = util.values_holder(entry[field] for field in fields)
+		holder, arg = util.values_holder([entry[field] for field in fields])
+
+		#append thing to holder and field
+		fields.append('thing')
+		holder = holder[:-1] + ',:thing)'
+
 		query = ''.join( ['INSERT INTO lookup ', util.fields_string(fields),
 			' VALUES ', holder] )
 		
