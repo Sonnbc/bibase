@@ -3,6 +3,7 @@ import util, expression
 from setting import settings
 import re
 from threading import Thread
+import nltk
 
 def make_connection():	
 	return cql.connect(
@@ -87,7 +88,7 @@ class Controller:
 		entry = self.keyed_entry(entry)
 	
 		fields = [field for field in entry.keys() 
-			if field in settings['lookup_fields'] if entry[field]]
+			if field in settings['lookuppy_fields'] if entry[field]]
 
 		holder, arg = util.values_holder([entry[field] for field in fields])
 
@@ -139,11 +140,17 @@ class Controller:
 		return [self.row_to_lookup_entry(row) for row in rows] if rows else []
 
 	def check(self, entry, cnf):
-		import nltk
+		return all(
+				any(clause[1] in util.nice_split(entry[clause[0]])
+					for clause in disjunction)
+				for disjunction in cnf)
+
+	def check2(self, entry, cnf):
 		return all(
 				any(clause[1] in nltk.word_tokenize(unicode(entry[clause[0]]).lower())
 					for clause in disjunction)
 				for disjunction in cnf)
+	
 
 	#TODO: (note) if field is not searchable then count is zero
 	#	so if cnf = (author=son or year=1992) then we don't query
@@ -162,7 +169,11 @@ class Controller:
 		entries = self.getmany_lookup([clause[1] for clause in best
 			if clause[0] in settings['searchable_fields'] ])
 		print "done"
-		return [entry for entry in entries if self.check(entry, cnf)]
+		#return [entry for entry in entries if self.check(entry, cnf)]
+		for entry in entries:
+			if self.check(entry, cnf) != self.check2(entry, cnf):
+				print {f:entry[f] for f in entry if entry[f]}
+				return []
 
 	###		
 	#helper functions:	
@@ -184,6 +195,7 @@ if __name__ == '__main__':
 	#a = con.disjuntion_solver([('author', 'danilevsky')])
 	#print a
 
+	#print string.punctuation
 	con = Controller()
 	s = """
 		(author = han and author = wang) or 

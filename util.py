@@ -1,7 +1,14 @@
 import string
 import nltk
 from nltk.corpus import stopwords
+import re
 
+def static_var(varname, value):
+	def decorate(func):
+		setattr(func, varname, value)
+		return func
+	return decorate
+		
 def convert(input):
 	"""
 	Convert input from unicode to str
@@ -39,8 +46,10 @@ def values_holder(values):
 	arg = dict(zip([item[1:] for item in items], values))
 	return holder, arg
 
-_stops = stopwords.words('english')
+#TODO: nice_tokens and nice_split do almost the same thing
+@static_var("stops", stopwords.words('english'))
 def nice_tokens(s):
+
 	if not isinstance(s, basestring):
 		return [str(s)]
 
@@ -48,15 +57,23 @@ def nice_tokens(s):
 		if 	token not in string.punctuation and 
 			len(token) > 2 and
 			'.' not in token and
-			token not in _stops]
+			token not in nice_tokens.stops]
 	return tokens		
+
+@static_var("pattern", '[' + string.punctuation.replace('-', ' ') + ']')
+def nice_split(s):
+	if not isinstance(s, basestring):
+		return [str(s)]
+	s = s.lower()
+	return re.split(nice_split.pattern, s)	
 
 #TODO: improve this
 def is_the_same(s1, s2):
 	return s1.lower() == s2.lower()
 
 
-
+if __name__ == '__main__':
+	print nice_tokens("This is a nice house")
 
 
 
