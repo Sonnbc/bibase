@@ -21,11 +21,16 @@ class Controller:
     def make_cursor(self):
         return self._connection.cursor()
 
+    def lookup_token(self, field, value):    
+        return '%s=%s' % (field, value)
+
     def lookup_tokens(self, entry):
         tokens = []
         for field in settings['searchable_fields']:
             if entry.get(field, None):
-                tokens = tokens + util.nice_tokens( entry[field] ) 
+                field_tokens = [self.lookup_token(field, value)
+                    for value in util.nice_tokens(entry[field])]
+                tokens = tokens + field_tokens
         return set(tokens)
 
     def row_to_entry(self, row):
@@ -88,7 +93,7 @@ class Controller:
         entry = self.keyed_entry(entry)
     
         fields = [field for field in entry.keys() 
-            if field in settings['lookuppy_fields'] if entry[field]]
+            if field in settings['lookup_fields'] if entry[field]]
 
         holder, arg = util.values_holder([entry[field] for field in fields])
 
@@ -118,18 +123,22 @@ class Controller:
         self.unsafe_insert_main(entry)
         self.unsafe_insert_lookup(entry)
 
-    def count_lookup(self, token, value):
+    def count_lookup(self, field, value):
         cursor = self.make_cursor()
-        cursor.execute('SELECT count(*) FROM lookup WHERE thing=:value limit 20000', 
-            dict(value=value))
+        token = self.lookup_token(field, value)
+        query = 'SELECT count(*) FROM lookup WHERE thing=:token limit 20000'
+        
+        cursor.execute(query, dict(token=token))
         res = cursor.fetchone()
         cursor.close()
+
         return res[0]
 
-    def getmany_lookup(self, values):
+    def getmany_lookup(self, clauses):
+        tokens = [self.lookup_token(*clause) for clause in clauses]
         cursor = self.make_cursor()
 
-        holder, arg = util.values_holder(values)
+        holder, arg = util.values_holder(tokens)
         query = ''.join(['SELECT * FROM lookup WHERE thing in ', holder])
         print cursor.prepare_inline(query, arg)
         cursor.execute(query, arg)
@@ -160,7 +169,7 @@ class Controller:
 
         print sizes
         print best
-        entries = self.getmany_lookup([clause[1] for clause in best
+        entries = self.getmany_lookup([clause for clause in best
             if clause[0] in settings['searchable_fields'] ])
         print "done"
         return [entry for entry in entries if self.check_against_cnf(entry, cnf)]
@@ -178,21 +187,28 @@ class Controller:
 
 if __name__ == '__main__':
     
-    # item = {'author': 'Son Nguyen and Jiawei Han', 'year': 2012, 
-    #   'title': 'stack over flow'}
+    item = {'author': 'Son Nguyen and Jiawei Han', 'year': 2012, 
+       'title': 'stack over flow'}
+
+    item2 = {'author': 'Son Nguyen and Indy Gupta', 'year': 2005,
+        'title': 'range check error'}   
+    
+    con = Controller()
+    con.delete('nguyenh2012')
+    con.delete('nguyeng2005')
+    con.insert(item)
+    con.insert(item2)
+
+    s = """(author = son)"""
+    res = con.search(s)
+    for x in res:
+        print util.nice_entry(x)
     
     # con = Controller()
-    # con.insert(item)
-    #a = con.disjuntion_solver([('author', 'danilevsky')])
-    #print a
-
-    #print string.punctuation
-    con = Controller()
-    s = """
-        (author = han and author = wang) or 
-        ((year=2005 or title=system) and (author = gupta))"""
+    # s = """
+    #     (author = han and author = wang) or 
+    #     ((year=2005 or title=system) and (author = gupta))"""
     
-    res = con.search(s)
-    print len(res)
-    #for entry in res:
-    #   print {field:entry[field] for field in entry if entry[field]}
+    # res = con.search(s)
+    # print len(res)
+

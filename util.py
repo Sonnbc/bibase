@@ -71,7 +71,9 @@ def nice_split(s):
 def is_the_same(s1, s2):
     return s1.lower() == s2.lower()
 
-
+def nice_entry(entry):
+    return {field:entry[field] for field in entry if entry[field]}
+        
 if __name__ == '__main__':
     print nice_tokens("This is a nice house")
 
