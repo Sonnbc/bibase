@@ -39,14 +39,10 @@ class Controller:
     def row_to_lookup_entry(self, row):
         return dict(zip(settings['lookup_fields'], row)) if row else None
 
-    def get(self, key):
-        cursor = self.make_cursor()
-        cursor.execute('SELECT * FROM main WHERE key=:key', dict(key=key))
-        row = cursor.fetchone()
-        cursor.close()
-        return self.row_to_entry(row)
+    def get(self, keys):
+        if not isinstance(keys, list):
+            keys = [keys]
 
-    def getmany(self, keys):
         cursor = self.make_cursor()
         holder, arg = util.values_holder(keys)
 
@@ -56,25 +52,26 @@ class Controller:
         cursor.close()
         return [self.row_to_entry(row) for row in rows] if rows else []
 
-    def delete(self, key):
-        entry = self.get(key)
-        if not entry:
-            return 
+    #TODO: now get can get multiple entries at once, need to modify delete    
+    # def delete(self, key):
+    #     entry = self.get(key)
+    #     if not entry:
+    #         return 
         
-        #remove from main
-        cursor = self.make_cursor()         
-        cursor.execute('DELETE FROM main WHERE key=:key', dict(key=key))
+    #     #remove from main
+    #     cursor = self.make_cursor()         
+    #     cursor.execute('DELETE FROM main WHERE key=:key', dict(key=key))
 
-        #remove from lookup
-        tokens = self.lookup_tokens(entry)
-        holder, arg = util.values_holder(tokens)
+    #     #remove from lookup
+    #     tokens = self.lookup_tokens(entry)
+    #     holder, arg = util.values_holder(tokens)
 
-        query = ''.join(['DELETE FROM lookup WHERE thing in ',
-            holder, ' AND key=:key'])
-        arg['key'] = key
+    #     query = ''.join(['DELETE FROM lookup WHERE thing in ',
+    #         holder, ' AND key=:key'])
+    #     arg['key'] = key
 
-        cursor.execute(query, arg)
-        cursor.close()
+    #     cursor.execute(query, arg)
+    #     cursor.close()
 
     def unsafe_insert_main(self, entry):
         fields = [field for field in entry.keys() 
@@ -113,12 +110,6 @@ class Controller:
 
     def insert(self, entry):
         entry = self.keyed_entry(entry)
-        
-        old_entry = self.get(entry['key'])
-        if old_entry:
-            if util.is_the_same(old_entry['title'], entry['title']):
-                raise NotImplementedError(
-                    'Different papers with the same key is unsupported.')
         
         self.unsafe_insert_main(entry)
         self.unsafe_insert_lookup(entry)
@@ -187,28 +178,28 @@ class Controller:
 
 if __name__ == '__main__':
     
-    item = {'author': 'Son Nguyen and Jiawei Han', 'year': 2012, 
-       'title': 'stack over flow'}
+    #item = {'author': 'Son Nguyen and Jiawei Han', 'year': 2012, 
+    #   'title': 'stack over flow 1'}
 
-    item2 = {'author': 'Son Nguyen and Indy Gupta', 'year': 2005,
-        'title': 'range check error'}   
+    #item2 = {'author': 'Son Nguyen and Indy Gupta', 'year': 2005,
+    #    'title': 'range check error 1'}   
+    
+    #con = Controller()
+    #con.delete('nguyenh2012')
+    #con.delete('nguyeng2005')
+    #con.insert(item)
+    #con.insert(item2)
+
+    # s = """(author = son)"""
+    # res = con.search(s)
+    # for x in res:
+    #     print util.nice_entry(x)
     
     con = Controller()
-    con.delete('nguyenh2012')
-    con.delete('nguyeng2005')
-    con.insert(item)
-    con.insert(item2)
-
-    s = """(author = son)"""
+    s = """
+        (author = han and author = wang) or 
+        ((year=2005 or title=system) and (author = gupta))"""
+    
     res = con.search(s)
-    for x in res:
-        print util.nice_entry(x)
-    
-    # con = Controller()
-    # s = """
-    #     (author = han and author = wang) or 
-    #     ((year=2005 or title=system) and (author = gupta))"""
-    
-    # res = con.search(s)
-    # print len(res)
+    print len(res)
 

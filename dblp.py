@@ -20,14 +20,12 @@ def add(tup):
 
     #print (begin,end)
     for entry in entries[begin : end]:
-        try:
+        #try:
             controller.insert(entry)
-        except NotImplementedError:
-            not_implemented_error_count += 1
-        except:
-            print sys.exc_info()
-            print entry
-            error += 1
+        # except:
+        #     print sys.exc_info()
+        #     print entry
+        #     error += 1
 
     if not_implemented_error_count + error > 0:
         print begin, end, not_implemented_error_count, error
