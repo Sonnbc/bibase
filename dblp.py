@@ -1,5 +1,5 @@
 from xml.etree.cElementTree import iterparse
-from controller import Controller
+from adapter import Adapter
 from multiprocessing import Pool
 import sys
 from setting import settings
@@ -14,7 +14,7 @@ batch_count = start_work_number / num_threads
 
 def add(tup):
     entries, begin, end = tup
-    controller = Controller()
+    adapter = Adapter()
 
     not_implemented_error_count = 0
     error = 0
@@ -22,7 +22,7 @@ def add(tup):
     #print (begin,end)
     for entry in entries[begin : end]:
         try:
-            controller.insert(entry)
+            adapter.insert(entry)
         except cql.apivalues.OperationalError:
            print sys.exc_info()
            print entry
@@ -31,7 +31,7 @@ def add(tup):
     if not_implemented_error_count + error > 0:
         print begin, end, not_implemented_error_count, error
 
-    controller.close()
+    adapter.close()
 
 source = "dblp/utf8.xml"
 

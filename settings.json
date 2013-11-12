@@ -1,14 +1,14 @@
 {
     "host" : "127.0.0.1",
     "port" : 9160,
-    "keyspace" : "dblp",
+    "keyspace" : "dblp5",
 
     "types" : ["article", "inproceedings", "proceedings", "book", 
         "incollection", "phdthesis", "mastersthesis", "www"],
 
-    "fields" : ["address", "author", "booktitle", "cdrom", "chapter",
+    "bib_fields" : ["address", "author", "booktitle", "cdrom", "chapter",
         "cite", "crossref", "editor", "ee", "isbn", "journal", "month",
-        "note", "number", "pages", "papertype", "publisher", "school",
+        "note", "number", "pages", "publisher", "school",
         "series", "title", "url", "volume", "year"],
 
     "searchable_fields" : ["author", "booktitle", 

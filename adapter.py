@@ -128,7 +128,6 @@ class Adapter:
 
         cursor.close()
 
-    #TODO: check for title too, in case of update
     def insert(self, entry):
         entry = self.keyed_entry(entry)
         
