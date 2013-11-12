@@ -132,10 +132,19 @@ class Adapter:
     def insert(self, entry):
         entry = self.keyed_entry(entry)
         
-        existings = self.getmany(entry['key'], 'extra')
-        extra = util.newest_extra([e['extra'] for e in existings])
-        entry['extra'] = util.next_extra(extra)
+        existings = self.getmany(entry['key'], ['extra', 'title'])
+        old_entry = next((e for e in existings 
+            if e['title'].lower()==entry['title'].lower()), None)
+        print old_entry
+        if old_entry:
+            entry['extra'] = old_entry['extra']
+            #need to remove entries from lookup first
+            self.delete(entry['key'], entry['extra'])
+        else:    
+            extra = util.newest_extra([e['extra'] for e in existings])
+            entry['extra'] = util.next_extra(extra)
 
+        #print entry['extra']    
         self.unsafe_insert_main(entry)
         self.unsafe_insert_lookup(entry)
 
@@ -196,15 +205,15 @@ class Adapter:
 if __name__ == '__main__':
 
     item1 = {'author': 'Son Nguyen and Indy Gupta', 'year': 2012, 
-        'title': 'stack over flow 2'}
+        'title': 'stack over flow 2', 'journal': 'whatever'}
     item2 = {'author': 'Son Nguyen and Indy Gupta', 'year': 2012,
-        'title': 'range check error 2'}    
+        'title': 'range check error 2 cool'}    
     
     adapter = Adapter()
-    #adapter.insert(item1)
-    #adapter.insert(item2)
-    adapter.delete('nguyeng2012', 1)
-    adapter.delete('nguyeng2012', 2)
+    adapter.insert(item1)
+    adapter.insert(item2)
+    #adapter.delete('nguyeng2012', 1)
+    #adapter.delete('nguyeng2012', 2)
 
     # s = """
     #     (author = han and author = wang and year=2008) or 
