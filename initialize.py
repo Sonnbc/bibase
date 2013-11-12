@@ -1,4 +1,4 @@
-#CREATE KEYSPACE dblp2 WITH REPLICATION = {'class' : 'SimpleStrategy', 'replication_factor': 3};
+#CREATE KEYSPACE dblp5 WITH REPLICATION = {'class' : 'SimpleStrategy', 'replication_factor': 3};
 
 import json, cql
 
@@ -12,13 +12,14 @@ _fields = """author varchar, editor varchar, title varchar,
     ee varchar, cdrom varchar, cite varchar, 
     publisher varchar, note varchar, crossref varchar, 
     isbn varchar, series varchar, school varchar, 
-    chapter varchar, papertype varchar"""
+    chapter varchar, papertype varchar,
+    key varchar, extra int"""
 
-_main = ''.join(["CREATE TABLE main (key varchar, PRIMARY KEY (key, title), ", 
+_main = ''.join(["CREATE TABLE main (PRIMARY KEY (key, extra), ", 
     _fields, ')'])
 
 _lookup = ''.join(["""CREATE TABLE lookup (thing varchar, 
-    key varchar, PRIMARY KEY (thing, key), """,
+    PRIMARY KEY (thing, key, extra), """,
     _fields, ')'])
 
 

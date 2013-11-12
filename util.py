@@ -34,9 +34,12 @@ def compute_key(item):
     key = ''.join(tokens).lower()
     return key
 
-def fields_string(fields):
+#TODO: optimize this, no need to instantiate pre and post everytime
+def fields_string(fields, brackets = True):
     assert( all( isinstance(item, basestring) for item in fields ) )
-    result = ''.join(['(', ','.join(fields), ')'])
+    pre = '(' if brackets else ''
+    post = ')' if brackets else ''
+    result = ''.join([pre, ','.join(fields), post])
     return result
 
 #TODO: optimize this
@@ -46,6 +49,16 @@ def values_holder(values):
     arg = dict(zip([item[1:] for item in items], values))
     return holder, arg
 
+def newest_extra(extras):
+    if not extras:
+        return None
+    return max(extras)
+
+def next_extra(current):   
+    if not current:
+        return 1
+    return current + 1
+         
 #TODO: nice_tokens and nice_split do almost the same thing
 @static_var("stops", stopwords.words('english'))
 def nice_tokens(s):

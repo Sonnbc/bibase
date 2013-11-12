@@ -4,6 +4,7 @@ from multiprocessing import Pool
 import sys
 from setting import settings
 import threading
+import cql
 
 num_threads = 20
 start_work_number = 50000
@@ -20,12 +21,12 @@ def add(tup):
 
     #print (begin,end)
     for entry in entries[begin : end]:
-        #try:
+        try:
             controller.insert(entry)
-        # except:
-        #     print sys.exc_info()
-        #     print entry
-        #     error += 1
+        except cql.apivalues.OperationalError:
+           print sys.exc_info()
+           print entry
+           error += 1
 
     if not_implemented_error_count + error > 0:
         print begin, end, not_implemented_error_count, error

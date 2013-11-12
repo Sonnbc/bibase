@@ -1,7 +1,7 @@
 {
     "host" : "127.0.0.1",
     "port" : 9160,
-    "keyspace" : "dblp",
+    "keyspace" : "dblp5",
 
     "types" : ["article", "inproceedings", "proceedings", "book", 
         "incollection", "phdthesis", "mastersthesis", "www"],

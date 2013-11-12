@@ -18,39 +18,56 @@ class Controller:
     def close(self) :
         self._connection.close()
     
-    def make_cursor(self):
-        return self._connection.cursor()
+    def count_lookup(self, field, value):
+        cursor = self.make_cursor()
+        token = self.lookup_token(field, value)
+        query = 'SELECT count(*) FROM lookup WHERE thing=:token limit 20000'
+        
+        cursor.execute(query, dict(token=token))
+        res = cursor.fetchone()
+        cursor.close()
 
-    def lookup_token(self, field, value):    
-        return '%s=%s' % (field, value)
+        return res[0]    
 
-    def lookup_tokens(self, entry):
-        tokens = []
-        for field in settings['searchable_fields']:
-            if entry.get(field, None):
-                field_tokens = [self.lookup_token(field, value)
-                    for value in util.nice_tokens(entry[field])]
-                tokens = tokens + field_tokens
-        return set(tokens)
-
-    def row_to_entry(self, row):
-        return dict(zip(settings['fields'], row)) if row else None
-
-    def row_to_lookup_entry(self, row):
-        return dict(zip(settings['lookup_fields'], row)) if row else None
-
-    def get(self, keys):
+    def getmany(self, keys, fields=settings['fields']):
         if not isinstance(keys, list):
             keys = [keys]
+        if not isinstance(fields, list):
+            fields = [fields]
+
+        holder, arg = util.values_holder(keys)
+        fs = util.fields_string(fields, False)
 
         cursor = self.make_cursor()
-        holder, arg = util.values_holder(keys)
-
-        query = ''.join(['SELECT * FROM main WHERE key IN ', holder])
+        query = ''.join(['SELECT ', fs, ' FROM main WHERE key IN ', holder])
         cursor.execute(query, arg)
         rows = cursor.fetchall() #TODO: dangerous? 
         cursor.close()
-        return [self.row_to_entry(row) for row in rows] if rows else []
+        return [self.row_to_entry(r, fields) for r in rows] if rows else []
+
+    def get(self, key, extra, fields = settings['fields']):
+        fs = util.fields_string(fields, False)
+        cursor = self.make_cursor()
+        query = ''.join(['SELECT ', fs, 
+            ' FROM main WHERE key = :key AND extra = :extra'])
+        arg = dict(key=key, extra=extra)
+        cursor.execute(query, arg)
+        row = cursor.fetchone()
+        cursor.close()
+        return self.row_to_entry(row, fields) if row else None
+
+    def getmany_lookup(self, clauses, fields=settings['lookup_fields']):
+        tokens = [self.lookup_token(*clause) for clause in clauses]
+        cursor = self.make_cursor()
+        holder, arg = util.values_holder(tokens)
+        fs = util.fields_string(fields)
+
+        query = ''.join(['SELECT ', fs, ' FROM lookup WHERE thing IN ', holder])
+        cursor.execute(query, arg)
+        
+        rows = cursor.fetchall() #TODO: dangerous??
+        cursor.close()
+        return [self.row_to_entry(r, fields) for r in rows] if rows else []    
 
     #TODO: now get can get multiple entries at once, need to modify delete    
     # def delete(self, key):
@@ -108,42 +125,16 @@ class Controller:
 
         cursor.close()
 
+    #TODO: check for title too, in case of update
     def insert(self, entry):
         entry = self.keyed_entry(entry)
         
+        existings = self.getmany(entry['key'], 'extra')
+        extra = util.newest_extra([e['extra'] for e in existings])
+        entry['extra'] = util.next_extra(extra)
+
         self.unsafe_insert_main(entry)
         self.unsafe_insert_lookup(entry)
-
-    def count_lookup(self, field, value):
-        cursor = self.make_cursor()
-        token = self.lookup_token(field, value)
-        query = 'SELECT count(*) FROM lookup WHERE thing=:token limit 20000'
-        
-        cursor.execute(query, dict(token=token))
-        res = cursor.fetchone()
-        cursor.close()
-
-        return res[0]
-
-    def getmany_lookup(self, clauses):
-        tokens = [self.lookup_token(*clause) for clause in clauses]
-        cursor = self.make_cursor()
-
-        holder, arg = util.values_holder(tokens)
-        query = ''.join(['SELECT * FROM lookup WHERE thing in ', holder])
-        print cursor.prepare_inline(query, arg)
-        cursor.execute(query, arg)
-        
-        rows = cursor.fetchall() #TODO: dangerous??
-        print len(rows)
-        cursor.close()
-        return [self.row_to_lookup_entry(row) for row in rows] if rows else []
-
-    def check_against_cnf(self, entry, cnf):
-        return all(
-                any(clause[1] in util.nice_split(entry[clause[0]])
-                    for clause in disjunction)
-                for disjunction in cnf)
 
     #TODO: (note) if field is not searchable then count is zero
     #   so if cnf = (author=son or year=1992) then we don't query
@@ -160,21 +151,44 @@ class Controller:
 
         print sizes
         print best
-        entries = self.getmany_lookup([clause for clause in best
+        entries = self.get_lookup([clause for clause in best
             if clause[0] in settings['searchable_fields'] ])
         print "done"
         return [entry for entry in entries if self.check_against_cnf(entry, cnf)]
 
-
     ###     
     #helper functions:  
     ###
+
+    def make_cursor(self):
+        return self._connection.cursor()
+
+    def lookup_token(self, field, value):    
+        return '%s=%s' % (field, value)
+
+    def lookup_tokens(self, entry):
+        tokens = []
+        for field in settings['searchable_fields']:
+            if entry.get(field, None):
+                field_tokens = [self.lookup_token(field, value)
+                    for value in util.nice_tokens(entry[field])]
+                tokens = tokens + field_tokens
+        return set(tokens)
+
+    def row_to_entry(self, row, fields):
+        return dict(zip(fields, row)) if row else None
 
     def keyed_entry(self, entry):
         res = dict(entry)
         if 'key' not in res:
             res['key'] = util.compute_key(res)
         return res
+
+    def check_against_cnf(self, entry, cnf):
+        return all(
+                any(clause[1] in util.nice_split(entry[clause[0]])
+                    for clause in disjunction)
+                for disjunction in cnf)    
 
 if __name__ == '__main__':
     
@@ -195,11 +209,22 @@ if __name__ == '__main__':
     # for x in res:
     #     print util.nice_entry(x)
     
-    con = Controller()
-    s = """
-        (author = han and author = wang) or 
-        ((year=2005 or title=system) and (author = gupta))"""
+    # con = Controller()
+    # s = """
+    #     (author = han and author = wang) or 
+    #     ((year=2005 or title=system) and (author = gupta))"""
     
-    res = con.search(s)
-    print len(res)
+    # res = con.search(s)
+
+    item1 = {'author': 'Son Nguyen and Indy Gupta', 'year': 2012, 
+        'title': 'stack over flow 2'}
+    item2 = {'author': 'Son Nguyen and Indy Gupta', 'year': 2012,
+        'title': 'range check error 2'}    
+    
+    con = Controller()
+    con.insert(item1)
+    con.insert(item2)
+
+    
+
 
