@@ -10,7 +10,7 @@ def make_connection():
         host = settings['host'], port = settings['port'], 
         keyspace = settings['keyspace'], cql_version = '3.0.0')
 
-class Controller:
+class Adapter:
     
     def __init__(self):
         self._connection = make_connection()
@@ -18,7 +18,11 @@ class Controller:
     def close(self) :
         self._connection.close()
     
+    #TODO: fix 20000
     def count_lookup(self, field, value):
+        if field not in settings['searchable_fields']:
+            return 20000
+
         cursor = self.make_cursor()
         token = self.lookup_token(field, value)
         query = 'SELECT count(*) FROM lookup WHERE thing=:token limit 20000'
@@ -49,7 +53,7 @@ class Controller:
         fs = util.fields_string(fields, False)
         cursor = self.make_cursor()
         query = ''.join(['SELECT ', fs, 
-            ' FROM main WHERE key = :key AND extra = :extra'])
+            ' FROM main WHERE key=:key AND extra=:extra'])
         arg = dict(key=key, extra=extra)
         cursor.execute(query, arg)
         row = cursor.fetchone()
@@ -60,7 +64,7 @@ class Controller:
         tokens = [self.lookup_token(*clause) for clause in clauses]
         cursor = self.make_cursor()
         holder, arg = util.values_holder(tokens)
-        fs = util.fields_string(fields)
+        fs = util.fields_string(fields, False)
 
         query = ''.join(['SELECT ', fs, ' FROM lookup WHERE thing IN ', holder])
         cursor.execute(query, arg)
@@ -69,26 +73,25 @@ class Controller:
         cursor.close()
         return [self.row_to_entry(r, fields) for r in rows] if rows else []    
 
-    #TODO: now get can get multiple entries at once, need to modify delete    
-    # def delete(self, key):
-    #     entry = self.get(key)
-    #     if not entry:
-    #         return 
-        
-    #     #remove from main
-    #     cursor = self.make_cursor()         
-    #     cursor.execute('DELETE FROM main WHERE key=:key', dict(key=key))
+    def delete(self, key, extra):
+        entry = self.get(key, extra)
+        if not entry:
+            return
 
-    #     #remove from lookup
-    #     tokens = self.lookup_tokens(entry)
-    #     holder, arg = util.values_holder(tokens)
+        #remove from main
+        cursor = self.make_cursor()
+        cursor.execute('DELETE FROM main WHERE key=:key AND extra=:extra',
+            dict(key=key, extra=extra))
 
-    #     query = ''.join(['DELETE FROM lookup WHERE thing in ',
-    #         holder, ' AND key=:key'])
-    #     arg['key'] = key
-
-    #     cursor.execute(query, arg)
-    #     cursor.close()
+        #remove from lookup
+        tokens = self.lookup_tokens(entry)
+        holder, arg = util.values_holder(tokens)
+        query = ''.join(['DELETE FROM lookup WHERE thing IN ',
+            holder, ' AND key=:key AND extra=:extra'])
+        arg['key'] = key
+        arg['extra'] = extra
+        cursor.execute(query, arg)
+        cursor.close
 
     def unsafe_insert_main(self, entry):
         fields = [field for field in entry.keys() 
@@ -143,15 +146,15 @@ class Controller:
     def search(self, search_query):
         print "start"
         cnf = expression.Expression(search_query).to_cnf()
-        clauses = set([clause for disjunction in cnf for clause in disjunction
-            if clause[0] in settings['searchable_fields'] ])
+        clauses = set([clause for disjunction in cnf for clause in disjunction])
+
         print "counting lookup"
         sizes = {clause:self.count_lookup(*clause) for clause in clauses}
         best = min(cnf, key=lambda x:sum(sizes.get(clause,0) for clause in x))
 
         print sizes
         print best
-        entries = self.get_lookup([clause for clause in best
+        entries = self.getmany_lookup([clause for clause in best
             if clause[0] in settings['searchable_fields'] ])
         print "done"
         return [entry for entry in entries if self.check_against_cnf(entry, cnf)]
@@ -191,39 +194,29 @@ class Controller:
                 for disjunction in cnf)    
 
 if __name__ == '__main__':
-    
-    #item = {'author': 'Son Nguyen and Jiawei Han', 'year': 2012, 
-    #   'title': 'stack over flow 1'}
-
-    #item2 = {'author': 'Son Nguyen and Indy Gupta', 'year': 2005,
-    #    'title': 'range check error 1'}   
-    
-    #con = Controller()
-    #con.delete('nguyenh2012')
-    #con.delete('nguyeng2005')
-    #con.insert(item)
-    #con.insert(item2)
-
-    # s = """(author = son)"""
-    # res = con.search(s)
-    # for x in res:
-    #     print util.nice_entry(x)
-    
-    # con = Controller()
-    # s = """
-    #     (author = han and author = wang) or 
-    #     ((year=2005 or title=system) and (author = gupta))"""
-    
-    # res = con.search(s)
 
     item1 = {'author': 'Son Nguyen and Indy Gupta', 'year': 2012, 
         'title': 'stack over flow 2'}
     item2 = {'author': 'Son Nguyen and Indy Gupta', 'year': 2012,
         'title': 'range check error 2'}    
     
-    con = Controller()
-    con.insert(item1)
-    con.insert(item2)
+    adapter = Adapter()
+    #adapter.insert(item1)
+    #adapter.insert(item2)
+    adapter.delete('nguyeng2012', 1)
+    adapter.delete('nguyeng2012', 2)
+
+    # s = """
+    #     (author = han and author = wang and year=2008) or 
+    #     ((year=2005 or title=system) and (author = gupta))"""
+
+    # res = adapter.search(s)
+    # print len(res)
+    #for x in res:
+    #    print util.nice_entry(x)
+
+
+
 
     
 
