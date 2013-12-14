@@ -1,0 +1,123 @@
+<html>
+<head>
+  <script type="text/javascript" src="//code.jquery.com/jquery-latest.min.js"></script>
+  <script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/jquery-cookie/1.3.1/jquery.cookie.min.js"></script>
+
+  <style>
+    .warning {
+      color: red;
+    }
+    #result {
+      float: right;
+      width: 50%;
+      border-style: solid;
+      height: 90%;
+      display: inline;
+      overflow: auto;
+      white-space: nowrap;
+    }
+
+    #input {
+      float: left;
+      width: 45%;
+      height: 90%;
+    }
+
+    #latex {
+      width: 100%;
+      height: 90%;
+    }
+
+    html, body {
+      width: 99%;
+      height: 100%;
+    }
+
+    span {
+      display: inline;
+    }
+  </style>
+</head>
+<body>
+  <div id="input">
+    <textarea name="latex" id="latex"
+      placeholder="Put your latex content here:"></textarea>
+
+    <input type="button" id="submit-btn" value="submit">
+  </div>   
+  <div id="result"/> 
+  
+ 
+  <script type="text/javascript">
+    $("#result").hide()
+
+    var re = new RegExp("\\\\cite\{([a-z0-9-]+)\}","g")
+    var bib_fields = ["address", "author", "booktitle", "cdrom", "chapter",
+        "cite", "crossref", "editor", "ee", "isbn", "journal", "month",
+        "note", "number", "pages", "publisher", "school",
+        "series", "title", "volume", "year"]
+    var bib_fields_dict = {}
+    bib_fields.forEach(function(x) {bib_fields_dict[x] = true})    
+
+    function dkey(key) {
+      return "<b>" + key + "</b>"
+    }
+
+    function space(n) {
+      spaces = []
+      while (n--) spaces.push('&nbsp;')
+      return spaces.join('')
+    }
+
+    function display(key, entries) {
+      var div = $('<p></p>')
+      $('#result').append(div)
+
+      if (!entries) {
+        div.append("<span class='warning'>%WARNING: no entries for " + dkey(key) + "</span><br>")
+        return
+      }
+      else if (entries.length > 1) {
+        div.append("<span class='warning'>%WARNING: multiple entries for " + dkey(key) + "</span><br>")
+      }
+      
+      entries.forEach(function(entry) {
+        var extra = entry['extra'] ? '-' + entry['extra'] : ''
+        var fline = ['@',entry['papertype'],'{', dkey(entry['key'] + extra),','].join('')
+        div.append('<span>' + fline + '</span> <br>')
+        for (var field in entry) {
+          if (bib_fields_dict[field] && entry[field]) {
+            div.append('<span>' + space(4)+ field + " = {" + entry[field] + "},</span><br>")
+          }
+        }
+        div.append('<span>}</span><br>')
+      })
+
+      
+    }
+
+    $('#submit-btn').click(function() {
+      var latex = $('#latex').val()
+      var keys = []
+      while (match = re.exec(latex))
+      {
+        keys.push(match[1])
+      }
+      
+      var post_data = {
+        'keys': keys,
+        'csrfmiddlewaretoken': '{{ csrf_token }}',
+      }
+
+      $.post('getbib/', post_data, function(data) {
+        $('#result').html('')
+        for (var key in data) {
+          display(key, data[key])
+        }
+        $("#result").show()
+      })
+    });
+  </script>
+</body>
+</html>
+

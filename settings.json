@@ -9,7 +9,7 @@
     "bib_fields" : ["address", "author", "booktitle", "cdrom", "chapter",
         "cite", "crossref", "editor", "ee", "isbn", "journal", "month",
         "note", "number", "pages", "publisher", "school",
-        "series", "title", "url", "volume", "year"],
+        "series", "title", "volume", "year"],
 
     "searchable_fields" : ["author", "booktitle", 
         "isbn", "journal", "month", "papertype", "publisher", "school",

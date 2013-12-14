@@ -5,10 +5,7 @@ import util
 import sys, json, re
 
 def bib_string(entry):
-    if entry['extra']:
-        extra = '-%s' % entry['extra']
-    else:
-        extra = ''  
+    extra = '-%s' % entry['extra'] if entry['extra'] else '' 
     fline = '@%s{%s%s,' % (entry['papertype'], entry['key'], extra)
     content = ',\n'.join(['    %s = {%s}' % (field, entry[field]) 
         for field in entry 

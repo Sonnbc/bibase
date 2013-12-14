@@ -1,6 +1,8 @@
-import json, util
+import json, os
+import util
 
-with open('settings.json') as settingFile:
+setting_path = os.path.join(os.path.dirname(__file__), 'settings.json')
+with open(setting_path) as settingFile:
     settings = util.convert(json.load(settingFile))
 
 extras = ['papertype', 'key', 'extra']
