@@ -134,7 +134,7 @@ class Adapter:
         existings = self.getmany(entry['key'], ['extra', 'title'])
         old_entry = next((e for e in existings 
             if e['title'].lower()==entry['title'].lower()), None)
-        print old_entry
+
         if old_entry:
             entry['extra'] = old_entry['extra']
             #need to remove entries from lookup first
