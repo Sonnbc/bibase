@@ -3,7 +3,7 @@
 import json, cql
 
 import controller
-from setting import settings, lookup_table_name
+from setting import settings
 
 _fields = """author varchar, editor varchar, title varchar, 
     booktitle varchar, pages varchar, year int, 
