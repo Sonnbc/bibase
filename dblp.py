@@ -10,7 +10,7 @@ num_threads = 20
 start_work_number = 50000
 batch_count = start_work_number / num_threads
 
-
+#TODO: better parser available online. no need to use this parser anymore
 
 def add(tup):
     entries, begin, end = tup

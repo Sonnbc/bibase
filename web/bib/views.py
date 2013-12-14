@@ -16,7 +16,6 @@ def index(request):
 #TODO: remove exemption
 @csrf_exempt
 def getbib(request):
-    print request.POST
     keys = dict(request.POST.iterlists()).get('keys[]')
 
     print dict(request.POST.iterlists())

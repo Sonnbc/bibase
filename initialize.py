@@ -2,7 +2,7 @@
 
 import json, cql
 
-import controller
+import adapter
 from setting import settings
 
 _fields = """author varchar, editor varchar, title varchar, 
@@ -24,7 +24,7 @@ _lookup = ''.join(["""CREATE TABLE lookup (thing varchar,
 
 
 def initialize():
-    connection = controller.make_connection()
+    connection = adapter.make_connection()
     cursor = connection.cursor()
 
     #create the main table
